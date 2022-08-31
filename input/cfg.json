@@ -1,0 +1,9 @@
+{
+	"input_json": "/home/m/files/OSL/OSL-data/repo_extractor/powertoys/powertoys_2022-08.json",
+	"output_csv": "/home/m/files/OSL/OSL-data/csv_writer/powertoys_2021-10.csv",
+	"columns": [
+		"Issue_Comments"
+	],
+	"delimiter": ",",
+	"separator": "=||="
+}
