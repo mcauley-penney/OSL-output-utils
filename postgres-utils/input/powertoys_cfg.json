@@ -1,0 +1,7 @@
+{
+	"database": "powertoys_2021-10_update_to_float",
+	"user": "postgres",
+	"password": "postgres",
+	"table": "pr_issue",
+	"metrics_input": "/home/m/files/OSL/OSL-data/metrics_processor/powertoys/powertoys_2021-10__metrics.json"
+}
