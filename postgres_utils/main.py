@@ -1,6 +1,5 @@
 """TODO."""
 
-
 import argparse
 from src import postgres_utils
 from src.utils import file_io_utils as file_io
@@ -13,7 +12,6 @@ def main():
     cursor = postgres_utils.PGCursor(cfg)
 
     cursor.update_keys_per_issue()
-
     cursor.update_keys_per_period()
 
     cursor.write_changes_to_database()

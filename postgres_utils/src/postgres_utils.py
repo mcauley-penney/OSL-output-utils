@@ -80,8 +80,6 @@ class PGCursor:
         """Update a row in the desired database and table."""
         table = self.cfg["table"]
 
-        update_query: str = (
-            f"UPDATE {table} SET {col} = {val} WHERE pr = '{item_num}';"
-        )
+        update_query: str = f"UPDATE {table} SET {col} = {val} WHERE pr = '{item_num}' AND project = 'jabref50';"
 
         self.cursor.execute(update_query)

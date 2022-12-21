@@ -1,0 +1,7 @@
+{
+	"database": "pt_new",
+	"user": "postgres",
+	"password": "postgres",
+	"table": "pr_issue",
+	"metrics_input": "/home/m/files/OSL/OSL-data/metrics_processor/powertoys/powertoys_metrics_2022-09.json"
+}

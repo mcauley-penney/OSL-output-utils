@@ -1,0 +1,7 @@
+{
+	"input_json": "/home/m/files/OSL/OSL-data/1-extractor/TEST/jabref_TEST.json",
+	"output_csv": "/home/m/files/OSL/OSL-data/csv_writer/jabref_TEST.csv",
+	"output_type": "merged_closed_pulls",
+	"delimiter": ",",
+	"separator": "=||="
+}
