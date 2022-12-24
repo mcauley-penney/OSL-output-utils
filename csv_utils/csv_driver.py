@@ -1,9 +1,15 @@
 """Convert JSON files to CSV."""
 
+# TODO:
+# 1. Can we create a validation stage that makes sure that certain items exist,
+#    ensuring certainty of proper CSV creation
+#    - would have to be per row
+#
+# 2.
 
 import argparse
 import csv
-from src import file_io_utils as file_io
+from src import file_io_utils as io
 
 
 def main():
@@ -14,43 +20,20 @@ def main():
         1. When the file list of commits has a length
            longer than 1, the list is surrounded by quotes.
            This behavior was in the old extractor too.
-
-        2.
-
-    Output orders:
-        "PR" file:
-            "Issue_Number", "Issue_Title", "Issue_Author_Name",
-            "Issue_Author_Login","Issue_Closed_Date", "Issue_Body",
-            "Issue_Comments", "PR_Title", "PR_Author_Name",
-            "PR_Author_Login", "PR_Closed_Date", "PR_Body",
-            "PR_Comments", "Commit_Author_Name",
-            "Commit_Date", "Commit_Message", "isPR"
-
-        "Commit" file:
-            "Issue_Num", "Author_Login", "File_Name",
-            "Patch_Text", "Commit_Message", "Commit_Title"
-
     """
     cfg: dict = get_user_cfg()
-    columns = get_columns(cfg["output_type"])
-    issues_data: dict = file_io.read_jsonfile_into_dict(cfg["input_json"])
+    input_issues_data: dict = io.read_jsonfile_into_dict(cfg["input_json"])
+    columns = get_output_cols(cfg["output_type"])
+    rows = []
 
-    with open(cfg["output_csv"], "w", newline="", encoding="utf-8") as out_csv:
+    rows.append(columns)
 
-        writer = csv.writer(
-            out_csv,
-            quoting=csv.QUOTE_MINIMAL,
-            delimiter=cfg["delimiter"],
-            quotechar='"',
-            # escapechar="",
-        )
+    for num, data in input_issues_data.items():
+        row_data = collect_row_data(num, data, cfg["separator"])
+        ordered_row_data = [row_data[key] for key in columns]
+        rows.append(ordered_row_data)
 
-        # write column labels
-        writer.writerow(columns)
-
-        for num, data in issues_data.items():
-            row_data = collect_row_data(num, data, cfg["separator"])
-            writer.writerow([row_data[key] for key in columns])
+    write_rows(cfg, rows)
 
 
 def get_user_cfg() -> dict:
@@ -62,7 +45,7 @@ def get_user_cfg() -> dict:
     """
     cfg_path = get_cli_args()
 
-    return file_io.read_jsonfile_into_dict(cfg_path)
+    return io.read_jsonfile_into_dict(cfg_path)
 
 
 def get_cli_args() -> str:
@@ -86,7 +69,7 @@ def get_cli_args() -> str:
     return arg_parser.parse_args().extractor_cfg_file
 
 
-def get_columns(output_type: str) -> list:
+def get_output_cols(output_type: str) -> list:
     """
     Return columns used to organize CSV output.
 
@@ -99,7 +82,8 @@ def get_columns(output_type: str) -> list:
 
     """
     cols: dict = {
-        # deprectated?
+        # TODO: deprectated?
+        #
         # "commit": [
         #     "Issue_Num",
         #     "Author_Login",
@@ -128,7 +112,6 @@ def get_columns(output_type: str) -> list:
         #     "isPR",
         # ],
         ##########################
-
         # NOTE: ETL1 inputs
         "merged_closed_commits": [
             "Author_Login",
@@ -181,24 +164,61 @@ def collect_row_data(issue_num: str, issue_data, separator: str) -> dict:
         dict: {column name: corresponding repo data point}
 
     """
-    # TODO: all of this should be in a try block?
-    issue_col_tbl: dict = {
-        "Issue_Author_Login": issue_data["userlogin"],
+    issue_col_tbl: dict = collect_issue_data(issue_num, issue_data, separator)
+
+    issue_col_tbl = collect_pr_data(issue_col_tbl, issue_data)
+
+    return issue_col_tbl
+
+
+def collect_issue_data(
+    issue_num: str, issue_data: dict, separator: str
+) -> dict:
+    """
+    Collect issue data for the current issue.
+
+        issue_num (str): issue number
+        issue_data (dict): issue datapoints, such as author
+        separator (str): string used to separate strings composed of other
+        strings, such as comments
+
+    Notes:
+        We must use the separator parameter to distinguish comments in a
+        manner that doesn't interfere with the CSV format, e.g. cannot use
+        commas to separate comments if the CSV uses commas as a column
+        separator
+
+    Returns:
+        dict: data from current issue pertaining to issue endpoints.
+    """
+    return {
+        "Issue_Num": issue_num,
         "Issue_Author_ID": issue_data["userid"],
+        "Issue_Author_Login": issue_data["userlogin"],
         "Issue_Body": issue_data["body"],
         "Issue_Closed_Date": issue_data["closed_at"],
-        "Issue_Created_Date": issue_data["created_at"],
         "Issue_Comments": separator.join(
             [comment["body"] for _, comment in issue_data["comments"].items()]
         ),
-        "Issue_Num": issue_num,
+        "Issue_Created_Date": issue_data["created_at"],
         "Issue_Title": issue_data["title"],
         "isPR": issue_data["is_pr"],
         "Num_Comments": issue_data["num_comments"],
-        "Num_Review_Comments": issue_data["num_review_comments"],
     }
 
-    try:
+
+def collect_pr_data(issue_col_tbl: dict, issue_data: dict):
+    """
+    Update dict of current row data with current issue's PR datapoints.
+
+        issue_col_tbl (dict): current row data
+        issue_data (dict): current issue data
+    """
+    if issue_col_tbl["isPR"] is True:
+        # PR data
+        issue_col_tbl["Num_Review_Comments"] = issue_data[
+            "num_review_comments"
+        ]
         issue_col_tbl["PR_Author_Login"] = issue_data["userlogin"]
         issue_col_tbl["PR_Author_Name"] = issue_data["userid"]
         issue_col_tbl["PR_Body"] = issue_data["body"]
@@ -207,45 +227,107 @@ def collect_row_data(issue_num: str, issue_data, separator: str) -> dict:
         issue_col_tbl["PR_Comments"] = issue_col_tbl["Issue_Comments"]
         issue_col_tbl["Status"] = issue_data["state"]
 
-    except KeyError:
-        issue_col_tbl["PR_Author_Login"] = ""
-        issue_col_tbl["PR_Author_Name"] = ""
-        issue_col_tbl["PR_Body"] = ""
-        issue_col_tbl["PR_Closed_Date"] = ""
-        issue_col_tbl["PR_Title"] = ""
-        issue_col_tbl["PR_Comments"] = ""
-        issue_col_tbl["Status"] = ""
+        # Commit data
+        try:
+            commits = list(issue_data["commits"].items())
 
-    try:
-        _, last_commit = list(issue_data["commits"].items())[-1]
-        files = last_commit["files"]
+        # put this into an else block?
+            if commits:
+                last_commit = commits[-1]
+                commit_data = last_commit[1]
+                files = commit_data["files"]
 
-        issue_col_tbl["Additions"] = files["additions"]
-        issue_col_tbl["Changes"] = files["changes"]
-        issue_col_tbl["Commit_Author_Name"] = last_commit["author_name"]
-        issue_col_tbl["Commit_Date"] = last_commit["date"]
-        issue_col_tbl["Commit_Message"] = last_commit["message"]
-        issue_col_tbl["Deletions"] = files["removals"]
-        issue_col_tbl["File_Names"] = files["file_list"]
-        issue_col_tbl["Num_Changed_Files"] = str(len(files["file_list"]))
-        issue_col_tbl["Num_Commits"] = str(len(issue_data["commits"]))
-        issue_col_tbl["Patch_Text"] = files["patch_text"]
-        issue_col_tbl["SHA"] = last_commit["sha"]
+                issue_col_tbl["Additions"] = files["additions"]
+                issue_col_tbl["Changes"] = files["changes"]
+                issue_col_tbl["Commit_Author_Name"] = commit_data["author_name"]
+                issue_col_tbl["Commit_Date"] = commit_data["date"]
+                issue_col_tbl["Commit_Message"] = commit_data["message"]
+                issue_col_tbl["Deletions"] = files["removals"]
+                issue_col_tbl["File_Names"] = files["file_list"]
+                issue_col_tbl["Num_Changed_Files"] = str(len(files["file_list"]))
+                issue_col_tbl["Num_Commits"] = str(len(issue_data["commits"]))
+                issue_col_tbl["Patch_Text"] = files["patch_text"]
+                issue_col_tbl["SHA"] = commit_data["sha"]
 
-    except KeyError:
-        issue_col_tbl["Additions"] = ""
-        issue_col_tbl["Changes"] = ""
-        issue_col_tbl["Commit_Author_Name"] = ""
-        issue_col_tbl["Commit_Date"] = ""
-        issue_col_tbl["Commit_Message"] = ""
-        issue_col_tbl["Deletions"] = ""
-        issue_col_tbl["File_Names"] = ""
-        issue_col_tbl["Num_Changed_Files"] = ""
-        issue_col_tbl["Num_Commits"] = ""
-        issue_col_tbl["Patch_Text"] = ""
-        issue_col_tbl["SHA"] = ""
+            else:
+                for key in [
+                    "Additions",
+                    "Changes",
+                    "Commit_Author_Name",
+                    "Commit_Date",
+                    "Commit_Message",
+                    "Deletions",
+                    "File_Names",
+                    "Num_Changed_Files",
+                    "Num_Commits",
+                    "Patch_Text",
+                    "SHA",
+                ]:
+                    issue_col_tbl[key] = ""
+
+        except KeyError:
+            for key in [
+                "Additions",
+                "Changes",
+                "Commit_Author_Name",
+                "Commit_Date",
+                "Commit_Message",
+                "Deletions",
+                "File_Names",
+                "Num_Changed_Files",
+                "Num_Commits",
+                "Patch_Text",
+                "SHA",
+            ]:
+                issue_col_tbl[key] = ""
+
+    else:
+        for key in [
+            "Num_Review_Comments",
+            "PR_Author_Login",
+            "PR_Author_Name",
+            "PR_Body",
+            "PR_Closed_Date",
+            "PR_Title",
+            "PR_Comments",
+            "Status",
+            "Additions",
+            "Changes",
+            "Commit_Author_Name",
+            "Commit_Date",
+            "Commit_Message",
+            "Deletions",
+            "File_Names",
+            "Num_Changed_Files",
+            "Num_Commits",
+            "Patch_Text",
+            "SHA",
+        ]:
+            issue_col_tbl[key] = ""
 
     return issue_col_tbl
+
+
+def write_rows(cfg: dict, out_rows: list) -> None:
+    """
+    Write gathered rows to the output CSV.
+
+        cfg (dict): user configuration
+        out_rows (list): list of lists of row data to write
+
+        Returns: None
+    """
+    with open(cfg["output_csv"], "w", newline="", encoding="utf-8") as out_csv:
+
+        writer = csv.writer(
+            out_csv,
+            quoting=csv.QUOTE_MINIMAL,
+            delimiter=cfg["delimiter"],
+            quotechar='"',
+            # escapechar="",
+        )
+
+        writer.writerows(out_rows)
 
 
 if __name__ == "__main__":
